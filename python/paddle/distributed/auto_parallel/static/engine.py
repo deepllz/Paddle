@@ -20,7 +20,6 @@ import os
 import random
 
 import numpy as np
-from utils import convert_to_dims_mapping
 
 import paddle
 import paddle.distributed.auto_parallel.static.utils as auto_utils
@@ -39,7 +38,6 @@ from paddle.static.amp.fp16_utils import _convert_float_to_bfloat16
 
 from ...utils.log_utils import get_logger
 from ..interface import CollectionNames, fetch, get_collection
-from ..placement_type import get_shard_spec
 from ..static.dist_tensor import DistributedTensor
 from ..strategy import Strategy
 from .callbacks import config_callbacks
@@ -609,16 +607,9 @@ class Engine:
                 input_var = self._inputs[ind]
                 input_spec = self._inputs_spec[ind]
                 dist_tensor = DistributedTensor(input_var)
-                mesh = input_spec.mesh
-                placements = input_spec.placements
-                sharding_specs = get_shard_spec(
-                    mesh, placements, len(input_spec.shape)
-                )
 
-                dist_tensor.dist_attr.process_mesh = mesh
-                dist_tensor.dist_attr.dims_mapping = convert_to_dims_mapping(
-                    sharding_specs, mesh
-                )
+                dist_tensor.dist_attr.process_mesh = input_spec.mesh
+                dist_tensor.dist_attr.dims_mapping = input_spec.dims_mapping
 
                 default_dist_ctx = get_default_distributed_context()
                 default_dist_ctx.add_dist_tensor_for_program(dist_tensor)

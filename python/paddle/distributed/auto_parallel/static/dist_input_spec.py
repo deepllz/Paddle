@@ -12,7 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
+
 from paddle.static import InputSpec
+
+from ..placement_type import get_shard_spec
+from .utils import convert_to_dims_mapping
 
 
 class DistrubutedInputSpec(InputSpec):
@@ -26,8 +31,9 @@ class DistrubutedInputSpec(InputSpec):
         placements=None,
     ):
         super().__init__(shape, dtype, name, stop_gradient)
-        self.mesh = mesh
-        self.placements = placements
+        self.mesh = copy.deepcopy(mesh)
+        sharding_specs = get_shard_spec(mesh, placements, len(self.shape))
+        self.dims_mapping = convert_to_dims_mapping(sharding_specs, mesh)
 
     @classmethod
     def from_dtensor(cls, dtensor, name=None):
@@ -44,6 +50,11 @@ class DistrubutedInputSpec(InputSpec):
             shape=dtensor.shape,
             dtype=dtensor.dtype,
             name=name,
-            mesh=dtensor.mesh,
+            mesh=dtensor.process_mesh,
             placements=dtensor.placements,
+        )
+
+    def __repr__(self):
+        return "{}, mesh:{}, placements:{}".format(
+            super().__repr__(), self.mesh, self.dims_mapping
         )
