@@ -603,9 +603,8 @@ class Engine:
 
     def process_dist_inputs(self):
         if isinstance(self._inputs_spec[0], DistrubutedInputSpec):
-            for ind in range(len(self._inputs)):
-                input_var = self._inputs[ind]
-                input_spec = self._inputs_spec[ind]
+
+            def dist_input_var(input_var, input_spec):
                 dist_tensor = DistributedTensor(input_var)
 
                 dist_tensor.dist_attr.process_mesh = input_spec.mesh
@@ -613,6 +612,16 @@ class Engine:
 
                 default_dist_ctx = get_default_distributed_context()
                 default_dist_ctx.add_dist_tensor_for_program(dist_tensor)
+
+            for ind in range(len(self._inputs)):
+                input_var = self._inputs[ind]
+                input_spec = self._inputs_spec[ind]
+                dist_input_var(input_var, input_spec)
+
+            for ind in range(len(self._labels)):
+                input_var = self._labels[ind]
+                input_spec = self._labels_spec[ind]
+                dist_input_var(input_var, input_spec)
 
     def _build(self, mode):
         if in_dynamic_mode() or self._dygraph_mode:

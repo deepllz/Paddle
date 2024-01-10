@@ -151,23 +151,18 @@ class TestSimpleNetForSemiAutoParallel(unittest.TestCase):
 
         # static training
         strategy = dist.Strategy()
-        input_spec = [
-            paddle.static.InputSpec(
-                shape=[BATCH_SIZE, IMAGE_SIZE], dtype="float32", name="images"
-            ),
-            paddle.static.InputSpec(
-                shape=[BATCH_SIZE, CLASS_NUM], dtype="float32", name="labels"
-            ),
-        ]
-        dist_model = dist.to_static(
-            layer, input_spec, None, loss_fn, opt, strategy=strategy
-        )
 
-        dist_model._mode = None
         dist_loader = dist.shard_dataloader(
             dataloader=self.data_loader,
             meshes=[mesh],
         )
+
+        dist_model = dist.to_static(
+            layer, dist_loader, loss_fn, opt, strategy=strategy
+        )
+
+        dist_model._mode = None
+
         with self.assertRaises(ValueError):
             for batch_id, (image, label) in enumerate(dist_loader()):
                 loss = dist_model(image, label)

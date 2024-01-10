@@ -72,7 +72,7 @@ class TestSemiAutoParallelMutualLoadBetweenDynamicAndStatic(
             shard_dims=None,
         )
         # static training
-        dist_model = dist.to_static(layer, None, data_loader, loss_fn, opt)
+        dist_model = dist.to_static(layer, dist_loader, loss_fn, opt)
         loss_list = []
         dist_model.train()
         for epoch in range(5):

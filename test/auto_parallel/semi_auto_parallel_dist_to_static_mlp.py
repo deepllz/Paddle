@@ -120,16 +120,8 @@ class TestSimpleNetForSemiAutoParallel:
     def run_dy2static(self, layer, opt, dist_loader):
         # create loss
         loss_fn = nn.MSELoss()
-        input_spec = [
-            paddle.static.InputSpec(
-                shape=[BATCH_SIZE, IMAGE_SIZE], dtype="float32", name="images"
-            ),
-            paddle.static.InputSpec(
-                shape=[BATCH_SIZE, CLASS_NUM], dtype="float32", name="labels"
-            ),
-        ]
         # static training
-        dist_model = dist.to_static(layer, input_spec, None, loss_fn, opt)
+        dist_model = dist.to_static(layer, dist_loader, loss_fn, opt)
         loss_list = []
         dist_model.train()
         for epoch in range(5):

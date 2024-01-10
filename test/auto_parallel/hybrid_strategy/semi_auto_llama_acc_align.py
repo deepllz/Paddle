@@ -220,7 +220,7 @@ class TestLlamaAuto:
             shard_dims="dp",
         )
         dist_model = dist.to_static(
-            model, None, train_dataloader, criterion, opt, strategy=strategy
+            model, dist_loader, criterion, opt, strategy=strategy
         )
 
         dist_model.train()

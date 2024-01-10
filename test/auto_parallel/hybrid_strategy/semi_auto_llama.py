@@ -209,8 +209,7 @@ class TestLlamaAuto:
 
             dist_model = dist.to_static(
                 model,
-                None,
-                train_dataloader,
+                dist_loader,
                 criterion,
                 optimizer,
                 strategy=strategy,

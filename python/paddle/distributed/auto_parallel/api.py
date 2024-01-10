@@ -1616,14 +1616,9 @@ class ShardDataloader:
 
         process_id = dist.get_rank()
         mesh_index = self.current_process_in_which_mesh(process_id)
-        self._need_data = True
         if mesh_index == -1:
-            self._need_data = False
-            return
-
-        if has_dataset_splitted is True or shard_dims is None:
-            self._dataloader = dataloader
-            self.batch_size = dataloader.batch_sampler.batch_size
+            dp_rank = 0
+            dp_world_size = self._meshes[0].get_dim_size(self._shard_dims[0])
         else:
             dp_rank = self._meshes[mesh_index].get_rank_by_dim(
                 self._shard_dims[mesh_index], process_id
@@ -1631,6 +1626,11 @@ class ShardDataloader:
             dp_world_size = self._meshes[mesh_index].get_dim_size(
                 self._shard_dims[mesh_index]
             )
+
+        if has_dataset_splitted is True or shard_dims is None:
+            self._dataloader = dataloader
+            self.batch_size = dataloader.batch_sampler.batch_size
+        else:
             self.batch_size = int(
                 dataloader.batch_sampler.batch_size / dp_world_size
             )
@@ -1720,8 +1720,6 @@ class ShardDataloader:
             raise ValueError(f"Unsupported batch_data type {type(batch_data)}")
 
     def __next__(self):
-        if self._need_data is False:
-            return [None] * len(self._meshes)
         batch_data = next(self.iter)
         return self._get_batch(batch_data)
 
