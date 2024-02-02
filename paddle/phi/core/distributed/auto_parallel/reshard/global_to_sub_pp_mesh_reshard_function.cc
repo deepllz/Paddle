@@ -78,19 +78,17 @@ void GlobalToSubPPMeshReshardFunction::Eval(phi::DeviceContext* dev_ctx,
                                             DistTensor* out) {
   VLOG(3) << "Call GlobalToSubPPMeshReshardFunction Eval";
   const DenseTensor& in_dense_value = in.value();
-  // const TensorDistAttr& in_dist_attr = in.dist_attr();
-  // const ProcessMesh& in_process_mesh = in_dist_attr.process_mesh();
-  // const std::vector<int64_t>& in_process_ids = in_process_mesh.process_ids();
-  // const ProcessMesh& out_process_mesh = out_dist_attr.process_mesh();
-  // const std::vector<int64_t>& out_process_ids =
-  // out_process_mesh.process_ids(); DataType dtype = in.dtype();
+  const ProcessMesh& out_process_mesh = out_dist_attr.process_mesh();
 
-  // if (IsCurRankInMesh(out_process_mesh)) {
-  SetValue(out, in_dense_value);
+  if (IsCurRankInMesh(out_process_mesh)) {
+    SetValue(out, in_dense_value);
+  } else {
+    *(out->unsafe_mutable_value()) =
+        phi::DenseTensor(std::make_shared<phi::Allocation>(
+                             nullptr, 0, phi::distributed::GetDefaultPlace()),
+                         in.value().meta());
+  }
   SetDistProps(out, in.dims(), out_dist_attr);
-  // } else {
-
-  // }
 }
 
 }  // namespace distributed
