@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "paddle/phi/core/distributed/auto_parallel/reshard/global_to_sub_pp_mesh_reshard_function.h"
+#include "paddle/phi/core/distributed/auto_parallel/reshard/global_and_sub_pp_mesh_reshard_function.h"
 
 #include "glog/logging.h"
 #include "paddle/phi/core/distributed/auto_parallel/dist_attr.h"
