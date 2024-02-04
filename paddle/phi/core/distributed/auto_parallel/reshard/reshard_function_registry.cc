@@ -74,6 +74,7 @@ REGISTER_RESHARD_FUNC(SameStatusReshardFunction);
 REGISTER_RESHARD_FUNC(SameNdMeshReshardFunction);
 REGISTER_RESHARD_FUNC(CrossNdMeshReshardFunction);
 REGISTER_RESHARD_FUNC(GlobalToSubPPMeshReshardFunction);
+REGISTER_RESHARD_FUNC(SubPPMeshToGlobalReshardFunction);
 
 }  // namespace distributed
 }  // namespace phi

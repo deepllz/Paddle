@@ -32,5 +32,18 @@ class GlobalToSubPPMeshReshardFunction final : public ReshardFunction {
   std::string Name() override { return "GlobalToSubPPMeshReshardFunction"; }
 };
 
+class SubPPMeshToGlobalReshardFunction final : public ReshardFunction {
+ public:
+  bool IsSuitable(const DistTensor& in,
+                  const TensorDistAttr& out_dist_attr) override;
+
+  void Eval(DeviceContext* dev_ctx,
+            const DistTensor& in,
+            const TensorDistAttr& out_dist_attr,
+            DistTensor* out) override;
+
+  std::string Name() override { return "GlobalToSubPPMeshReshardFunction"; }
+};
+
 }  // namespace distributed
 }  // namespace phi
