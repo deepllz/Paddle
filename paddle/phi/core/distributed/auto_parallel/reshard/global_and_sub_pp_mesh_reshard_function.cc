@@ -86,7 +86,6 @@ void GlobalToSubPPMeshReshardFunction::Eval(phi::DeviceContext* dev_ctx,
   const DenseTensor& in_dense_value = in.value();
   const ProcessMesh& out_process_mesh = out_dist_attr.process_mesh();
   int64_t cur_global_rank = GetCurGlobalRank();
-  LOG(INFO) << "cur_global_rank: " << cur_global_rank;
   if (IsCurRankInMesh(out_process_mesh)) {
     SetValue(out, in_dense_value);
   } else {
