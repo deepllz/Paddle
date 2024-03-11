@@ -1126,11 +1126,30 @@ class Completer:
         seg_op_deps = collections.OrderedDict()  # struct_name -> [idx]
         seg_op_mesh = collections.OrderedDict()  # struct_name -> process_mesh
         regex = re.compile(seg_method, re.IGNORECASE)
+
+        start_op_index = 0
         for i, op in enumerate(ops):
-            struct_name = op.struct_name
+            m = regex.search(op.struct_name)
+            if m:
+                start_op_index = i
+                break
+
+        total_op_num = len(ops)
+        end_op_index = total_op_num - 1
+        for i in reversed(range(total_op_num)):
+            m = regex.search(ops[i].struct_name)
+            if m:
+                end_op_index = i
+                break
+        # all ops betweeen start_op_index and end_op_index should not be ignored
+
+        for i in range(start_op_index, end_op_index + 1):
+            struct_name = ops[i].struct_name
             m = regex.search(struct_name)
             if not m:
-                continue
+                assert i + 1 < total_op_num
+                struct_name = ops[i + 1].struct_name
+                m = regex.search(struct_name)
 
             struct_name = struct_name[m.start(0) :].split("/")[0]
             dist_op = self._dist_context.get_dist_op_for_program(op)
