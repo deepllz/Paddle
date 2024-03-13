@@ -1141,18 +1141,30 @@ class Completer:
             if m:
                 end_op_index = i
                 break
-        # all ops betweeen start_op_index and end_op_index should not be ignored
 
+        # all ops betweeen start_op_index and end_op_index should not be ignored
         for i in range(start_op_index, end_op_index + 1):
             struct_name = ops[i].struct_name
             m = regex.search(struct_name)
             if not m:
-                assert i + 1 < total_op_num
-                struct_name = ops[i + 1].struct_name
-                m = regex.search(struct_name)
+                # only assgin op created by reshard is allowed
+                if (
+                    ops[i].type == "assign"
+                    and "reshard_api" in ops[i].output_arg_names[0]
+                ):
+                    for j in range(i + 1, total_op_num):
+                        m = regex.search(ops[j].struct_name)
+                        if m:
+                            break
+                    assert m
+                    struct_name = ops[j].struct_name
+                else:
+                    raise ValueError(
+                        f"The op {ops[i]} should only be created by reshard"
+                    )
 
             struct_name = struct_name[m.start(0) :].split("/")[0]
-            dist_op = self._dist_context.get_dist_op_for_program(op)
+            dist_op = self._dist_context.get_dist_op_for_program(ops[i])
             if struct_name not in seg_op_deps:
                 seg_op_deps[struct_name] = [i]
                 seg_op_mesh[struct_name] = dist_op.dist_attr.process_mesh
