@@ -164,10 +164,6 @@ def shard_op(
             >>> dist_add(x, y)
 
     """
-    # Operators in dynamic graph mode already support distributed computing
-    if paddle.in_dynamic_mode():
-        return op
-
     if process_mesh is not None:
         assert isinstance(
             process_mesh, ProcessMesh
