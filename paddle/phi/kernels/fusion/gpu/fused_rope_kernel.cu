@@ -203,10 +203,10 @@ void FusedRopeKernel(const Context& dev_ctx,
                                             head_dim,
                                             batch_stride,
                                             seq_stride,
-                                            outs_data,
                                             num_inputs,
                                             div_c,
-                                            rotary_emb_base);
+                                            rotary_emb_base,
+                                            outs_data);
   } else {
     // Multi Query Attention (MQA) or Group Query Attention (GQA)
     PADDLE_ENFORCE_EQ(
@@ -247,10 +247,10 @@ void FusedRopeKernel(const Context& dev_ctx,
                                             head_dim,
                                             batch_stride_q,
                                             seq_stride_q,
-                                            outs_data,
                                             1,
                                             div_c,
-                                            rotary_emb_base);
+                                            rotary_emb_base,
+                                            outs_data);
 
     // rotary position embedding K,V
     phi::Array<const T*, 3> input_kv{ins_data[1], ins_data[2], nullptr};
@@ -273,10 +273,10 @@ void FusedRopeKernel(const Context& dev_ctx,
                                             head_dim,
                                             batch_stride_kv,
                                             seq_stride_kv,
-                                            out_kv,
                                             num_inputs - 1,
                                             div_c,
-                                            rotary_emb_base);
+                                            rotary_emb_base,
+                                            out_kv);
   }
 }
 }  // namespace fusion
