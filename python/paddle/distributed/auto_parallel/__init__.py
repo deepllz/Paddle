@@ -22,6 +22,7 @@ from .interface import (  # noqa: F401
     shard_op,
     shard_tensor,
 )
+from .intermediate import sharded_data_parallel  # noqa: F401
 from .process_mesh import ProcessMesh  # noqa: F401
 from .random import parallel_manual_seed  # noqa: F401
 from .static.engine import Engine  # noqa: F401
