@@ -27,8 +27,8 @@ class TestTensorParallelAPI(test_base.CommunicationTestDistBase):
         self._default_envs = {
             "dtype": "float32",
             "seed": "2023",
-            "dp": "1",
-            "mp": "2",
+            "dp": "2",
+            "mp": "1",
             "pp": "1",
             "acc_step": "2",
         }
@@ -37,14 +37,17 @@ class TestTensorParallelAPI(test_base.CommunicationTestDistBase):
             "amp": ["true"],
             "amp_level": ["O2"],
             "amp_dtype": [
-                "float16",
+                "bfloat16",
             ],
             "amp_master_grad": [
                 "False",
             ],
+            "sharding_stage": [
+                "1",
+            ],
         }
 
-    def test_simple_net_mp2(self):
+    def test_simple_net_dp2(self):
         envs_list = test_base.gen_product_envs_list(
             self._default_envs, self._changeable_envs
         )
