@@ -27,6 +27,8 @@ class ParallelOptimizer:
 
     def parallelize(self, level, parallized_parameters):
         assert self.optimizer is not None
+        if self.is_initialized:
+            return
         # 1.replace optimizer parameters
         self.optimizer._parameter_list = parallized_parameters
 
@@ -46,6 +48,7 @@ class ParallelOptimizer:
             )
         else:
             self.optimizer = dist.shard_optimizer(self.optimizer)
+        self.is_initialized = True
 
 
 class ParallelBase(Layer):
@@ -89,7 +92,6 @@ class ParallelBase(Layer):
         assert isinstance(self.optimizer, ParallelOptimizer)
         assert not self.optimizer.is_initialized
         self.optimizer.parallelize(self.level, self.model.parameters())
-        self.optimizer.is_initialized = True
 
     def forward(self, *args):
         if not self.is_parallelized:

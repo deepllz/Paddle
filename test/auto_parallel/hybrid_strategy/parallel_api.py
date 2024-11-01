@@ -137,7 +137,7 @@ class TestParallelAPI:
         np.random.seed(seed)
         random.seed(seed)
         paddle.seed(seed)
-
+        self.only_build = int(os.getenv("only_build", 0))
         self.init_dist_env()
 
     def init_dist_env(self):
@@ -191,6 +191,10 @@ class TestParallelAPI:
             for param in model.parameters():
                 assert not param._is_initialized()
                 param.initialize()
+
+        if self.only_build:
+            # check model here
+            return
 
         train_dataset = RandomDataset(self.config.seq_length)
         train_sampler = BatchSampler(

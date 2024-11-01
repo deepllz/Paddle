@@ -30,7 +30,6 @@ class ShardedDataParallel(ParallelBase):
             os_g: Zero Stage2
             p_g_os: Zero Stage3
             Default: None, which means optimizer is replicated among all process.
-        scaler (paddle.amp.GradScaler): Amp loss scale, not implemented currently.
         offload (bool): whether enable cpu offload strategy, not implemented currently.
         exclude_layer (list): Specify which layers do not use the zero stage strategy, not implemented currently.
     """
@@ -40,13 +39,11 @@ class ShardedDataParallel(ParallelBase):
         model,
         optimizer=None,
         level=None,
-        scaler=None,
         offload=False,
         exclude_layer=None,
     ):
         super().__init__(model, optimizer)
         assert level in ("os", "os_g", "p_g_os", None)
-        assert scaler is None
         assert offload is False
         assert exclude_layer is None
 
@@ -58,7 +55,7 @@ class ShardedDataParallel(ParallelBase):
 
 
 def sharded_data_parallel(
-    model, optimizer, level=None, scaler=None, offload=False, exclude_layer=None
+    model, optimizer, level=None, offload=False, exclude_layer=None
 ):
     """
     sharded_data_parallel converts model and optimizer to distributed and supports set zero stage1/2/3
@@ -71,7 +68,6 @@ def sharded_data_parallel(
             os_g: Zero Stage2
             p_g_os: Zero Stage3
             Default: None, which means optimizer is replicated among all process.
-        scaler (paddle.amp.GradScaler): Amp loss scale, not implemented currently.
         offload (bool): whether enable cpu offload strategy, not implemented currently.
         exclude_layer (list): Specify which layers do not use the zero stage strategy, not implemented currently.
 
@@ -80,7 +76,7 @@ def sharded_data_parallel(
         ParallelOptimizer: a distributed optimizer
     """
     sdp_model = ShardedDataParallel(
-        model, optimizer, level, scaler, offload, exclude_layer
+        model, optimizer, level, offload, exclude_layer
     )
 
     # check global_mesh
