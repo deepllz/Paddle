@@ -311,8 +311,7 @@ class TestParallelAPI:
             for step, inputs in enumerate(dist_loader()):
                 input_ids, labels = inputs
                 loss = dist_model(input_ids, labels)
-                logging.info(step, loss)
-
+                logging.info(f"step: {step}, loss: {loss}")
                 if step >= 10:
                     break
 
