@@ -41,7 +41,6 @@ class PipelineParallel(ParallelModel):
         name_to_layer = {}
         for layer_name, layer in model.named_sublayers():
             name_to_layer[layer_name] = layer
-        print("name_to_layer:", name_to_layer)
 
         def get_layer_by_name(name):
             assert (
