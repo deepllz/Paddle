@@ -250,7 +250,6 @@ class TestParallelAPI:
         model, optimizer = self.parallel_model(model, optimizer)
 
         criterion = LlamaPretrainingCriterion(self.config)
-        # criterion = self.parallel_model(criterion)
 
         if self.config.use_lazy_init:
             for param in model.parameters():

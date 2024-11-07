@@ -48,9 +48,6 @@ class PipelineParallel(ParallelModel):
             ), f"layer name:{name} not in the model, please check the split_spec"
             return name_to_layer[name]
 
-        def get_mesh(pp_index):
-            return mesh.get_mesh_with_dim("pp")[pp_index]
-
         def forward_post_hook(layer, input, output):
             pipeline_stage_index = layer.pipeline_stage_index
             split_point = layer.split_point
@@ -60,20 +57,20 @@ class PipelineParallel(ParallelModel):
                 for key, tensor in output.items():
                     output[key] = dist.reshard(
                         tensor,
-                        get_mesh(pipeline_stage_index + 1),
+                        self.get_mesh(pipeline_stage_index + 1),
                         tensor.placements,
                     )
             elif isinstance(output, (list, tuple)):
                 for i in range(len(output)):
                     output[i] = dist.reshard(
                         output[i],
-                        get_mesh(pipeline_stage_index + 1),
+                        self.get_mesh(pipeline_stage_index + 1),
                         output[i].placements,
                     )
             elif isinstance(output, paddle.Tensor):
                 output = dist.reshard(
                     output,
-                    get_mesh(pipeline_stage_index + 1),
+                    self.get_mesh(pipeline_stage_index + 1),
                     output.placements,
                 )
             else:
@@ -110,7 +107,7 @@ def pipeline_parallel(model, optimizer, split_spec, mesh=None, dimension=None):
     Args:
         model (paddle.nn.Layer): A single card model to be distributed
         optimizer (paddle.optimizer.Optimizer): An optimizer to be distributed
-        split_spec (OrderedDict): Pipeline parallel split point, the order of the keys \u200bis the order of the pipeline stage
+        split_spec (OrderedDict): Pipeline parallel split point, the order of the keys is the order of the pipeline stage
         mesh (ProcessMesh): A ProcessMesh Object.
         dimension (int|str): The mesh dimension to pipeline the model.
 
