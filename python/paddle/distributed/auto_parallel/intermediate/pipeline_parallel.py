@@ -17,6 +17,11 @@ from enum import Enum
 
 import paddle
 import paddle.distributed as dist
+from paddle import pir
+from paddle.base.framework import (
+    in_dygraph_mode,
+    in_pir_mode,
+)
 from paddle.distributed import fleet
 
 from .parallel_base import ParallelModel, ParallelOptimizer
@@ -48,6 +53,16 @@ class PipelineParallel(ParallelModel):
             ), f"layer name:{name} not in the model, please check the split_spec"
             return name_to_layer[name]
 
+        def is_tensor(tensor):
+            if in_dygraph_mode():
+                return isinstance(tensor, paddle.Tensor)
+            elif in_pir_mode():
+                return isinstance(tensor, pir.Value)
+            else:
+                raise RuntimeError(
+                    "PipelineParallel are only supported in dynamic or pir mode."
+                )
+
         def forward_post_hook(layer, input, output):
             pipeline_stage_index = layer.pipeline_stage_index
             split_point = layer.split_point
@@ -55,6 +70,7 @@ class PipelineParallel(ParallelModel):
             # reshard to next pipeline stage
             if isinstance(output, (dict, OrderedDict)):
                 for key, tensor in output.items():
+                    assert is_tensor(tensor)
                     output[key] = dist.reshard(
                         tensor,
                         self.get_mesh(pipeline_stage_index + 1),
@@ -62,12 +78,13 @@ class PipelineParallel(ParallelModel):
                     )
             elif isinstance(output, (list, tuple)):
                 for i in range(len(output)):
+                    assert is_tensor(output[i])
                     output[i] = dist.reshard(
                         output[i],
                         self.get_mesh(pipeline_stage_index + 1),
                         output[i].placements,
                     )
-            elif isinstance(output, paddle.Tensor):
+            elif is_tensor(output):
                 output = dist.reshard(
                     output,
                     self.get_mesh(pipeline_stage_index + 1),
@@ -97,6 +114,23 @@ class PipelineParallel(ParallelModel):
                     "SplitPoint.BEGINNING is not supported currently"
                 )
                 layer.register_forward_pre_hook(forward_pre_hook)
+
+        pipeline_stage_index = 0
+        meet_split_layer = False
+        for layer_name, layer in model.named_sublayers():
+            if layer_name in split_layer_names:
+                meet_split_layer = True
+
+            if meet_split_layer is False:
+                layer.pipeline_stage_index = pipeline_stage_index
+            else:
+                if split_layer_names[pipeline_stage_index] in layer_name:
+                    layer.pipeline_stage_index = pipeline_stage_index
+                else:
+                    pipeline_stage_index += 1
+                    layer.pipeline_stage_index = pipeline_stage_index
+                    meet_split_layer = False
+
         return model
 
 
