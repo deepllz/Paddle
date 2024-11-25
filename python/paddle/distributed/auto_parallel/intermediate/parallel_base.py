@@ -149,7 +149,7 @@ class ParallelModel:
     def _shard_all_param(self, model):
         param_name_to_shard_param = {}
 
-        def shard_layer_param(name, layer):
+        def shard_layer_param(layer):
             if self.pp_parallelizer is not None:
                 assert hasattr(layer, "pipeline_stage_index")
             for param_name in list(layer._parameters.keys()):
@@ -178,7 +178,7 @@ class ParallelModel:
                         setattr(layer, param_name, param)
 
         for name, layer in model.named_sublayers():
-            shard_layer_param(name, layer)
+            shard_layer_param(layer)
 
 
 def parallelize_model_and_optimizer(model, optimizer=None):
