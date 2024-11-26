@@ -777,6 +777,8 @@ ir_guard._switch_to_pir()
 newaxis: None = None
 inf = math.inf
 nan = math.nan
+pi = math.pi
+e = math.e
 
 __all__ = [
     'block_diag',
@@ -1214,4 +1216,6 @@ __all__ = [
     'inf',
     'newaxis',
     'nan',
+    'pi',
+    'e',
 ]
