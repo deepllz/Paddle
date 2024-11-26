@@ -148,10 +148,8 @@ class PipelineParallel(ParallelModel):
 
         def forward_post_hook(layer, input, output):
             if isinstance(output, (list, tuple)):
-                if self.index is None:
-                    self.index = list(range(len(output)))
                 global_output = list(output)
-                for ind in self.index:
+                for ind in range(len(global_output)):
                     if is_tensor(global_output[ind]):
                         global_output[ind] = dist.shard_tensor(
                             global_output[ind],
