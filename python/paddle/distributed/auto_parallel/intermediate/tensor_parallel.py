@@ -16,7 +16,6 @@ import re
 
 import paddle
 import paddle.distributed as dist
-from paddle.distributed import fleet
 
 from .parallel_base import ParallelModel, ParallelOptimizer, is_tensor
 
@@ -155,85 +154,6 @@ class PrepareLayerOutput(PlanBase):
 
     def apply(self, layer, process_mesh, shard_weight=None, shard_bias=None):
         layer.register_forward_post_hook(self.fn(process_mesh=process_mesh))
-
-
-class GlobalMeshOutput(PlanBase):
-    """
-    make the output of specific index on global mesh. if index is None, make all
-    """
-
-    def __init__(self, index=None):
-        super().__init__()
-        self.index = index
-
-    def apply(self, layer, process_mesh, shard_weight=None, shard_bias=None):
-        g_mesh = fleet.auto.get_mesh()
-        if "pp" in g_mesh.dim_names:
-            g_mesh = g_mesh.get_mesh_with_dim("pp")
-
-        def forward_post_hook(layer, input, output):
-            if isinstance(output, (list, tuple)):
-                if self.index is None:
-                    self.index = list(range(len(output)))
-                global_output = list(output)
-                for ind in self.index:
-                    if is_tensor(global_output[ind]):
-                        global_output[ind] = dist.shard_tensor(
-                            global_output[ind],
-                            g_mesh,
-                            [
-                                dist.Replicate()
-                                for _ in range(len(g_mesh._shape))
-                            ],
-                        )
-                if isinstance(output, tuple):
-                    global_output = tuple(global_output)
-                return global_output
-            elif is_tensor(output):
-                return dist.shard_tensor(
-                    output,
-                    g_mesh,
-                    [dist.Replicate() for _ in range(len(g_mesh._shape))],
-                )
-            else:
-                raise TypeError(
-                    "layer output can only be tensor or list/tuple of tensor"
-                )
-
-        layer.register_forward_post_hook(forward_post_hook)
-
-
-class GlobalMeshInput(PlanBase):
-    """
-    if a layer's inputs contain global mesh tensor, convert it to sub mesh tensor
-    """
-
-    def __init__(self):
-        super().__init__()
-
-    def apply(self, layer, process_mesh, shard_weight=None, shard_bias=None):
-        g_mesh = fleet.auto.get_mesh()
-        if "pp" in g_mesh.dim_names:
-            g_mesh = g_mesh.get_mesh_with_dim("pp")
-        else:
-            return
-
-        def forward_pre_hook(layer, input):
-            new_input = []
-            for t in input:
-                if is_tensor(t) and t.is_dist() and t.process_mesh == g_mesh:
-                    new_input.append(
-                        dist.reshard(
-                            t,
-                            process_mesh,
-                            [dist.Replicate(), dist.Replicate()],
-                        )
-                    )
-                else:
-                    new_input.append(t)
-            return tuple(new_input)
-
-        layer.register_forward_pre_hook(forward_pre_hook)
 
 
 def sp_split(x, process_mesh, need_transpose):

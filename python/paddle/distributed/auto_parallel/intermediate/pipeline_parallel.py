@@ -32,10 +32,23 @@ class SplitPoint(Enum):
 
 
 class PipelineParallel(ParallelModel):
-    def __init__(self, model, split_spec):
+    def __init__(
+        self, model, split_spec, global_output_layers, layers_with_global_input
+    ):
         super().__init__(model)
         self.split_spec = split_spec
+        self.global_output_layers = global_output_layers
+        self.layers_with_global_input = layers_with_global_input
         self.pp_parallelizer = self.pipeline_parallel_fn
+        self.name_to_layer = {}
+        for layer_name, layer in model.named_sublayers():
+            self.name_to_layer[layer_name] = layer
+
+    def get_layer_by_name(self, name):
+        assert (
+            name in self.name_to_layer
+        ), f"layer name:{name} not in the model, please check the split_spec"
+        return self.name_to_layer[name]
 
     def pipeline_parallel_fn(self, model):
         mesh = fleet.auto.get_mesh()
@@ -45,12 +58,6 @@ class PipelineParallel(ParallelModel):
         name_to_layer = {}
         for layer_name, layer in model.named_sublayers():
             name_to_layer[layer_name] = layer
-
-        def get_layer_by_name(name):
-            assert (
-                name in name_to_layer
-            ), f"layer name:{name} not in the model, please check the split_spec"
-            return name_to_layer[name]
 
         def forward_post_hook(layer, input, output):
             pipeline_stage_index = layer.pipeline_stage_index
@@ -86,6 +93,7 @@ class PipelineParallel(ParallelModel):
             return output
 
         def forward_pre_hook(layer, input):
+            split_point = layer.split_point
             assert split_point == SplitPoint.BEGINNING
             # TODO(deepllz): support in the future
             return input
@@ -120,7 +128,7 @@ class PipelineParallel(ParallelModel):
 
         # step2: insert reshard
         for name in split_layer_names:
-            layer = get_layer_by_name(name)
+            layer = self.get_layer_by_name(name)
             split_point = self.split_spec[name]
             layer.split_point = split_point
             if split_point == SplitPoint.END:
@@ -130,11 +138,77 @@ class PipelineParallel(ParallelModel):
                     "SplitPoint.BEGINNING is not supported currently"
                 )
                 layer.register_forward_pre_hook(forward_pre_hook)
-
+        if self.global_output_layers:
+            self.process_global_mesh_layers()
         return model
 
+    def process_global_mesh_layers(self):
+        g_mesh = fleet.auto.get_mesh()
+        g_mesh = g_mesh.get_mesh_with_dim("pp")
 
-def pipeline_parallel(model, optimizer, split_spec, mesh=None, dimension=None):
+        def forward_post_hook(layer, input, output):
+            if isinstance(output, (list, tuple)):
+                if self.index is None:
+                    self.index = list(range(len(output)))
+                global_output = list(output)
+                for ind in self.index:
+                    if is_tensor(global_output[ind]):
+                        global_output[ind] = dist.shard_tensor(
+                            global_output[ind],
+                            g_mesh,
+                            [
+                                dist.Replicate()
+                                for _ in range(len(g_mesh._shape))
+                            ],
+                        )
+                if isinstance(output, tuple):
+                    global_output = tuple(global_output)
+                return global_output
+            elif is_tensor(output):
+                return dist.shard_tensor(
+                    output,
+                    g_mesh,
+                    [dist.Replicate() for _ in range(len(g_mesh._shape))],
+                )
+            else:
+                raise TypeError(
+                    "layer output can only be tensor or list/tuple of tensor"
+                )
+
+        def forward_pre_hook(layer, input):
+            pp_idx = getattr(layer, "pipeline_stage_index", 0)
+            new_input = []
+            for t in input:
+                if is_tensor(t) and t.is_dist() and t.process_mesh == g_mesh:
+                    new_input.append(
+                        dist.reshard(
+                            t,
+                            self.get_mesh(pp_idx),
+                            [dist.Replicate(), dist.Replicate()],
+                        )
+                    )
+                else:
+                    new_input.append(t)
+            return tuple(new_input)
+
+        for layer_name in self.global_output_layers:
+            layer = self.get_layer_by_name(layer_name)
+            layer.register_forward_post_hook(forward_post_hook)
+
+        for layer_name in self.layers_with_global_input:
+            layer = self.get_layer_by_name(layer_name)
+            layer.register_forward_pre_hook(forward_pre_hook)
+
+
+def pipeline_parallel(
+    model,
+    optimizer,
+    split_spec,
+    global_output_layers=None,
+    layers_with_global_input=None,
+    mesh=None,
+    dimension=None,
+):
     """
     pipeline_parallel converts model and optimizer to pipelined distributed model
 
@@ -146,6 +220,11 @@ def pipeline_parallel(model, optimizer, split_spec, mesh=None, dimension=None):
             if split_spec is a OrderedDict|dict, key is the layer name, and the value is the split position that can be SplitPoint.BEGINNING or SplitPoint.END, the order of the keys is the order of the pipeline stage.
             NOTE: dict is also ordered after python3.7, so use dict at this time.
         the order of the keys is the order of the pipeline stage
+        global_output_layers (str|list(str)): make the output tensor of specific layers on global mesh.
+            Default None, which means no layer's outputs on global mesh
+        layers_with_global_input (str|list(str)): layers with same prefix as layers_with_global_input contain global mesh input tensor. Take effect only if global_output_layers is not None.
+            if None, and it will be set to the same value as split_spec if it is a str or list(str).
+            if split_spec is a dict and global_output_layers is not None, layers_with_global_input can not be None.
         mesh (ProcessMesh): A ProcessMesh Object.
         dimension (int|str): The mesh dimension to pipeline the model.
 
@@ -202,12 +281,32 @@ def pipeline_parallel(model, optimizer, split_spec, mesh=None, dimension=None):
                 for i in range(1, pp_size)
             ]
         )
+        if global_output_layers and layers_with_global_input is None:
+            layers_with_global_input = matched_layer_name
     else:
         split_spec_dict = split_spec
 
-    logger.info(f"split_spec_dict: {split_spec_dict}")
+    if isinstance(global_output_layers, str):
+        global_output_layers = [global_output_layers]
+    else:
+        assert isinstance(
+            global_output_layers, (list, tuple)
+        ), f"global_output_layers can only be list or list(str), but got:{type(global_output_layers)}"
 
-    model = PipelineParallel(model, split_spec_dict)
+    if isinstance(layers_with_global_input, str):
+        layers_with_global_input = [layers_with_global_input]
+    else:
+        assert isinstance(
+            layers_with_global_input, (list, tuple)
+        ), f"layers_with_global_input can only be list or list(str), but got:{type(layers_with_global_input)}"
+
+    logger.info(
+        f"split_spec_dict: {split_spec_dict}, global_output_layers: {global_output_layers}, layers_with_global_input: {layers_with_global_input}"
+    )
+
+    model = PipelineParallel(
+        model, split_spec_dict, global_output_layers, layers_with_global_input
+    )
     if optimizer is not None:
         optimizer = ParallelOptimizer(optimizer)
 

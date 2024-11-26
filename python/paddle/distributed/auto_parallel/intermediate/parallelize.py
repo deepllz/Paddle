@@ -25,7 +25,11 @@ def parallelize(
     if pp_config is not None:
         assert isinstance(pp_config, dict)
         model, optimizer = pipeline_parallel(
-            model, optimizer, pp_config.get('split_spec')
+            model,
+            optimizer,
+            pp_config.get('split_spec'),
+            pp_config.get("global_output_layers", None),
+            pp_config.get("layers_with_global_input", None),
         )
     if mp_config is not None:
         assert isinstance(mp_config, dict)
