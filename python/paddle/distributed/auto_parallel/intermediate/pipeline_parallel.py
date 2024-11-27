@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import itertools
+import logging
 import re
 from collections import OrderedDict
 from enum import Enum
@@ -32,13 +33,11 @@ class SplitPoint(Enum):
 
 
 class PipelineParallel(ParallelModel):
-    def __init__(
-        self, model, split_spec, global_output_layers, layers_with_global_input
-    ):
+    def __init__(self, model, split_spec, global_spec, pipeline_layers):
         super().__init__(model)
         self.split_spec = split_spec
-        self.global_output_layers = global_output_layers
-        self.layers_with_global_input = layers_with_global_input
+        self.global_spec = global_spec
+        self.pipeline_layers = pipeline_layers
         self.pp_parallelizer = self.pipeline_parallel_fn
         self.name_to_layer = {}
         for layer_name, layer in model.named_sublayers():
@@ -138,7 +137,7 @@ class PipelineParallel(ParallelModel):
                     "SplitPoint.BEGINNING is not supported currently"
                 )
                 layer.register_forward_pre_hook(forward_pre_hook)
-        if self.global_output_layers:
+        if self.global_spec:
             self.process_global_mesh_layers()
         return model
 
@@ -189,63 +188,53 @@ class PipelineParallel(ParallelModel):
                     new_input.append(t)
             return tuple(new_input)
 
-        for layer_name in self.global_output_layers:
+        for layer_name in self.global_spec:
             layer = self.get_layer_by_name(layer_name)
             layer.register_forward_post_hook(forward_post_hook)
 
-        for layer_name in self.layers_with_global_input:
+        for layer_name in self.pipeline_layers:
             layer = self.get_layer_by_name(layer_name)
             layer.register_forward_pre_hook(forward_pre_hook)
 
 
-def pipeline_parallel(
-    model,
-    optimizer,
-    split_spec,
-    global_output_layers=None,
-    layers_with_global_input=None,
-    mesh=None,
-    dimension=None,
-):
+def pipeline_parallel(model, optimizer=None, config=None):
     """
     pipeline_parallel converts model and optimizer to pipelined distributed model
 
     Args:
         model (paddle.nn.Layer): A single card model to be distributed
         optimizer (paddle.optimizer.Optimizer): An optimizer to be distributed
-        split_spec (OrderedDict|dict|str|list(str)): The pipeline parallel split point.
-            if split_spec is a string or list, such as "llama.layer" or ["llama.layerA", "llama.layerB"], Then the layer with same prefix a will be divided equally according to the size of pipeline degree.
-            if split_spec is a OrderedDict|dict, key is the layer name, and the value is the split position that can be SplitPoint.BEGINNING or SplitPoint.END, the order of the keys is the order of the pipeline stage.
-            NOTE: dict is also ordered after python3.7, so use dict at this time.
-        the order of the keys is the order of the pipeline stage
-        global_output_layers (str|list(str)): make the output tensor of specific layers on global mesh.
-            Default None, which means no layer's outputs on global mesh
-        layers_with_global_input (str|list(str)): layers with same prefix as layers_with_global_input contain global mesh input tensor. Take effect only if global_output_layers is not None.
-            if None, and it will be set to the same value as split_spec if it is a str or list(str).
-            if split_spec is a dict and global_output_layers is not None, layers_with_global_input can not be None.
-        mesh (ProcessMesh): A ProcessMesh Object.
-        dimension (int|str): The mesh dimension to pipeline the model.
+        config (dict): {
+            "split_spec": OrderedDict|dict|str|list(str), The pipeline parallel split point.
+                if split_spec is a string or list, such as "llama.layer" or ["llama.layerA", "llama.layerB"], Then the layer with same prefix a will be divided equally according to the size of pipeline degree.
+                if split_spec is a OrderedDict|dict, key is the layer name, and the value is the split position that can be SplitPoint.BEGINNING or SplitPoint.END, the order of the keys is the order of the pipeline stage.
+                NOTE: dict is also ordered after python3.7, so use dict at this time.
+            "global_spec": str|list(str), make the output tensor of specific layers on global mesh.
+        }
 
     Returns:
         PipelineParallel: a distributed model
         ParallelOptimizer: a distributed optimizer
     """
-    if mesh is None:
-        mesh = fleet.auto.get_mesh()
-        assert (
-            mesh is not None
-        ), "global mesh must not be None, please call fleet.auto.set_mesh(global_mesh) firstly"
-        assert (
-            "pp" in mesh.dim_names
-        ), "pp must in the mesh dim_names when use pipeline_parallel"
-    else:
-        assert NotImplementedError(
-            "Specifying a custom mesh is not supported currently"
-        )
 
+    split_spec = config.get("split_spec")
+    if split_spec is None:
+        logging.warning("No split_spec, pipeline parallel won't do anything.")
+        return model, optimizer
+
+    mesh = fleet.auto.get_mesh()
+    assert (
+        mesh is not None
+    ), "global mesh must not be None, please call fleet.auto.set_mesh(global_mesh) firstly"
+    assert (
+        "pp" in mesh.dim_names
+    ), "pp must in the mesh dim_names when use pipeline_parallel"
+
+    global_spec = config.get("global_spec")
     if isinstance(split_spec, str):
         split_spec = [split_spec]
 
+    matched_layer_name = None
     if isinstance(split_spec, (list, tuple)):
         # match layer_name with split_spec following by a dot and numbers and no other characters
         # such as split_spec = ["llama.layer"], then llama.layer.0 is matched, llama.layer.0.mlp is not matched
@@ -279,31 +268,26 @@ def pipeline_parallel(
                 for i in range(1, pp_size)
             ]
         )
-        if global_output_layers and layers_with_global_input is None:
-            layers_with_global_input = matched_layer_name
     else:
         split_spec_dict = split_spec
+        if global_spec:
+            raise NotImplementedError(
+                "global_spec should be None if split_spec is a dict"
+            )
 
-    if isinstance(global_output_layers, str):
-        global_output_layers = [global_output_layers]
+    if isinstance(global_spec, str):
+        global_spec = [global_spec]
     else:
         assert isinstance(
-            global_output_layers, (list, tuple)
-        ), f"global_output_layers can only be list or list(str), but got:{type(global_output_layers)}"
-
-    if isinstance(layers_with_global_input, str):
-        layers_with_global_input = [layers_with_global_input]
-    else:
-        assert isinstance(
-            layers_with_global_input, (list, tuple)
-        ), f"layers_with_global_input can only be list or list(str), but got:{type(layers_with_global_input)}"
+            global_spec, (list, tuple)
+        ), f"global_spec can only be list or list(str), but got:{type(global_spec)}"
 
     logger.info(
-        f"split_spec_dict: {split_spec_dict}, global_output_layers: {global_output_layers}, layers_with_global_input: {layers_with_global_input}"
+        f"split_spec_dict: {split_spec_dict}, global_spec: {global_spec}"
     )
 
     model = PipelineParallel(
-        model, split_spec_dict, global_output_layers, layers_with_global_input
+        model, split_spec_dict, global_spec, matched_layer_name
     )
     if optimizer is not None:
         optimizer = ParallelOptimizer(optimizer)

@@ -28,15 +28,11 @@ def parallelize(
         model, optimizer = pipeline_parallel(
             model,
             optimizer,
-            pp_config.get('split_spec'),
-            pp_config.get("global_output_layers", None),
-            pp_config.get("layers_with_global_input", None),
+            pp_config,
         )
     if mp_config is not None:
         assert isinstance(mp_config, dict)
-        model, optimizer = tensor_parallel(
-            model, optimizer, mp_config.get('parallelize_plan')
-        )
+        model, optimizer = tensor_parallel(model, optimizer, mp_config)
     if dp_config is not None:
         assert isinstance(dp_config, dict)
         if 'sharding_level' not in dp_config.keys():
