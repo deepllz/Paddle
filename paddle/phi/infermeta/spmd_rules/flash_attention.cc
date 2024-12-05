@@ -228,6 +228,8 @@ SpmdInfo FlashAttInferSpmd(const DistMetaTensor& q,
   std::string v_axes = {
       batch_axis, seq_len_kv_axis, num_heads_axis, head_dim_v_axis};
   // [batch_size, seq_len_q, num_heads, head_dim_v]
+  std::string attn_mask_axes = {
+      batch_axis, num_heads_axis, seq_len_q_axis, seq_len_kv_axis};
   std::string out_axes = {
       batch_axis, seq_len_q_axis, num_heads_axis, head_dim_v_axis};
   // [batch_size,  num_heads, seq_len_q, seq_len_kv]
@@ -241,9 +243,9 @@ SpmdInfo FlashAttInferSpmd(const DistMetaTensor& q,
   auto v_dist_attr_dst = UnShardTensorDims(k_dist_attr, {1, 3});
 
   if (!is_same_num_heads && !is_divisible) {
-    q_dist_attr_dst = UnShardTensorDims(q_dist_attr, {2});
-    k_dist_attr_dst = UnShardTensorDims(k_dist_attr, {2});
-    v_dist_attr_dst = UnShardTensorDims(k_dist_attr, {2});
+    q_dist_attr_dst = UnShardTensorDims(q_dist_attr_dst, {2});
+    k_dist_attr_dst = UnShardTensorDims(k_dist_attr_dst, {2});
+    v_dist_attr_dst = UnShardTensorDims(v_dist_attr_dst, {2});
   }
 
   std::vector<std::pair<std::string, std::vector<int64_t>>> axes_sharding_info;
@@ -257,10 +259,11 @@ SpmdInfo FlashAttInferSpmd(const DistMetaTensor& q,
   q_dist_attr_dst = MapDims(q_dist_attr, axis_to_dim_map, q_axes);
   k_dist_attr_dst = MapDims(k_dist_attr, axis_to_dim_map, k_axes);
   v_dist_attr_dst = MapDims(v_dist_attr, axis_to_dim_map, v_axes);
+  auto attn_mask_dist_attr_dst =
+      MapDims(attn_mask_dist_attr, axis_to_dim_map, attn_mask_axes);
 
-  // TODO(liuzhenhai): process fixed_seed and  attn_mask
+  // TODO(liuzhenhai): process fixed_seed
   auto fixed_seed_offset_dist_attr_dst = fixed_seed_offset_dist_attr;
-  auto attn_mask_dist_attr_dst = attn_mask_dist_attr;
 
   auto out = MapDims(q_dist_attr, axis_to_dim_map, out_axes);
   auto softmax = MapDims(q_dist_attr, axis_to_dim_map, softmax_axes);
