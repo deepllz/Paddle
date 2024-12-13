@@ -1533,6 +1533,7 @@
   output : Tensor(out), Tensor(mask)
   infer_meta :
     func : DropoutInferMeta
+    spmd_rule: DropoutFwdInferSpmd
   kernel :
     func : dropout
     data_type : x
